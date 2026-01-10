@@ -1,0 +1,16 @@
+name = "VogelZang"
+uuid = "0ded166c-e2c0-4871-90de-ba7944eaf5d2"
+version = "0.1.0"
+authors = ["arzwa <arthur.zwaenepoel@gmail.com>"]
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[compat]
+CSV = "0.10.15"
+DataFrames = "1.8.1"
+REPL = "1.11.0"
+StatsBase = "0.34.9"
