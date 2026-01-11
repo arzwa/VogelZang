@@ -12,6 +12,7 @@ export quiz
 global audiodir = joinpath(@__DIR__, "../data/audio")
 global dbfile = joinpath(@__DIR__, "../data/database.csv")
 global db = CSV.read(dbfile, DataFrame)
+global width = 62
 
 function get_audio_duration(fname)
     io = PipeBuffer()
@@ -33,8 +34,13 @@ function randplayback(species, duration)
     return fname, start, duration, spdf[i,:]
 end
 
-playback(file, start, duration) = run(`ffplay -ss $start -t $duration -v 0 -autoexit -nodisp $file`)
-playback(file, start=0) = run(`ffplay -ss $start -v 0 -autoexit -nodisp $file`)
+function playback(file, start, duration) 
+    run(`ffplay -ss $start -t $duration -v 0 -autoexit -nodisp $file`)
+end
+
+function playback(file, start=0) 
+    run(`ffplay -ss $start -v 0 -autoexit -nodisp $file`)
+end
 
 _lowercase(x) = ismissing(x) ? "" : lowercase(x)
 
@@ -54,10 +60,10 @@ function question(vogel, duration)
         end
         try 
             playback(fname, start, duration)
-            print("Antwoord (`o` voor opnieuw, `a` voor ander fragment):\n  ")
+            print("Antwoord ([o]pnieuw, [a]nder fragment):\n  ")
             answer = lowercase(readline())
         catch InterruptException
-            print("\nAntwoord (`o` voor opnieuw, `a` voor ander fragment):\n  ")
+            print("\nAntwoord ([o]pnieuw, [a]nder fragment):\n  ")
             answer = lowercase(readline())
         end
     end
@@ -72,11 +78,12 @@ function question(vogel, duration)
     print("  |    $(row.taxon)\n")
     print("  |    $(row.family) ($(row.familie))\n")
     while true
-        print("Opnieuw horen [o]? Volledig fragment [v]?\n")
+        print("Opnieuw horen [o]? Ander fragment [a]? Volledig fragment [v]?\n")
         print("(gelijk welke toets om verder te gaan)")
         antw = strip(readline()) 
-        antw != "o" && antw != "v" && break
+        antw != "o" && antw != "a" && antw != "v" && break
         antw == "o" && playback(fname, start, duration)
+        antw == "a" && playback(randplayback(vogel, duration)[1:3]...)
         antw == "v" && playback(fname)
     end
     return correct
@@ -91,7 +98,7 @@ function quiz()
     df = filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
     species = unique(df[:,:taxon])
     nspecies = length(species)
-    println("-"^53)
+    println("-"^width)
     print("Hoeveel vragen? ")
     ns = strip(readline())
     nq = !isempty(ns) && all(isnumeric, ns) ? parse(Int, ns) : 10
@@ -107,16 +114,16 @@ function quiz()
     correct = 0
     try
         for q=1:nq
-            println("-"^53)
+            println("-"^width)
             println("⋅ Vraag $q ⋅")
             sp = species[idx[q]]
             correct += question(sp, duration)    
         end
     catch InterruptException
-        println("\n"*"-"^53)
+        println("\n"*"-"^width)
         println("\nQuiz stopgezet...")
     end
-    println("\n"*"-"^53)
+    println("\n"*"-"^width)
     println("Score: $correct/$nq")
 end
 
