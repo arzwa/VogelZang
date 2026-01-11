@@ -13,16 +13,24 @@ global audiodir = joinpath(@__DIR__, "../data/audio")
 global dbfile = joinpath(@__DIR__, "../data/database.csv")
 global db = CSV.read(dbfile, DataFrame)
 
-function randplayback(vogel, duration)
+function get_audio_duration(fname)
     io = PipeBuffer()
-    fname = joinpath(audiodir, vogel.file)
     run(`ffprobe -i $fname -show_entries format=duration -v quiet -of csv="p=0"`, devnull, io, stderr)
     len = parse(Float64, read(io, String))
-    if duration > len
-        @error "duration > len"
-    end
-    start = rand() * (len - duration)
-    return fname, start, duration
+end
+
+# get the audio fragment durations and write to the database file
+function update_db!()
+    db.duration = map(x->get_audio_duration(joinpath(audiodir, x)), db.file)
+    CSV.write(dbfile, db)
+end
+
+function randplayback(species, duration)
+    spdf = filter(x->x.taxon == species, db)
+    i = sample(1:nrow(spdf), Weights(spdf.duration))
+    start = rand() * (spdf[i,:duration] - duration)
+    fname = joinpath(audiodir, spdf[i,:file])
+    return fname, start, duration, spdf[i,:]
 end
 
 playback(file, start, duration) = run(`ffplay -ss $start -t $duration -v 0 -autoexit -nodisp $file`)
@@ -30,13 +38,19 @@ playback(file, start=0) = run(`ffplay -ss $start -v 0 -autoexit -nodisp $file`)
 
 _lowercase(x) = ismissing(x) ? "" : lowercase(x)
 
+function iscorrect(row, answer)
+    (answer == _lowercase(row.name) || 
+        answer == _lowercase(row.taxon) || 
+        answer == _lowercase(row.naam))
+end
+
 function question(vogel, duration)
     print("Welke vogel horen we? (^C om te antwoorden)")
-    fname, start, duration = randplayback(vogel, duration)
+    fname, start, duration, row = randplayback(vogel, duration)
     answer = "o"
     while answer == "o" || answer == "a"
-        if answer == "a" 
-            fname, start, duration = randplayback(vogel, duration)
+        if answer == "a"  # new fragment for same species
+            fname, start, duration, row = randplayback(vogel, duration)
         end
         try 
             playback(fname, start, duration)
@@ -47,18 +61,19 @@ function question(vogel, duration)
             answer = lowercase(readline())
         end
     end
-    correct = (answer == _lowercase(vogel.name) || 
-            answer == _lowercase(vogel.taxon) || 
-            answer == _lowercase(vogel.naam))
-    if correct 
+    correct = iscorrect(row, answer)
+    if correct
         printstyled("Correct!\n", bold=true, color=:green) 
     else
         printstyled("Fout", bold=true, color=:red) 
         print(", we hoorden\n") 
     end
-    println("  | $(vogel.naam) ($(vogel.name))\n  |    $(vogel.taxon)\n  |    $(vogel.family) ($(vogel.familie))")
+    print("  | $(row.naam) ($(row.name))\n")
+    print("  |    $(row.taxon)\n")
+    print("  |    $(row.family) ($(row.familie))\n")
     while true
-        print("Opnieuw horen [o]? Volledig fragment [v]?\n(gelijk welke toets om verder te gaan)")
+        print("Opnieuw horen [o]? Volledig fragment [v]?\n")
+        print("(gelijk welke toets om verder te gaan)")
         antw = strip(readline()) 
         antw != "o" && antw != "v" && break
         antw == "o" && playback(fname, start, duration)
@@ -74,24 +89,28 @@ function quiz()
     menu = MultiSelectMenu(options, pagesize=40)
     choices = sort(collect(request("Kies uit onderstaande ($choice):", menu)))
     df = filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
-    nr = size(df, 1)
+    species = unique(df[:,:taxon])
+    nspecies = length(species)
     println("-"^53)
-    print("Hoeveel vragen? (<= $nr) ")
+    print("Hoeveel vragen? ")
     ns = strip(readline())
-    nq = !isempty(ns) && all(isnumeric, ns) ? parse(Int, ns) : nr
-    print("Duur audiofragment (s)? ")
+    nq = !isempty(ns) && all(isnumeric, ns) ? parse(Int, ns) : 10
+    print("  OK, $nq vragen.\nDuur audiofragment (s)? ")
     duration = tryparse(Float64, strip(readline()))
     if isnothing(duration)
         println("  ongeldige duur, dan maar vijf seconden...")
         duration = 5.
+    else
+        println("  $duration seconden.")
     end
-    idx = sample(1:nr, nq, replace=false)
+    idx = sample(1:nspecies, nq)
     correct = 0
     try
         for q=1:nq
             println("-"^53)
             println("⋅ Vraag $q ⋅")
-            correct += question(df[idx[q],:], duration)    
+            sp = species[idx[q]]
+            correct += question(sp, duration)    
         end
     catch InterruptException
         println("\n"*"-"^53)
