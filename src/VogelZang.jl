@@ -93,6 +93,10 @@ function quiz()
     menu = MultiSelectMenu(options, pagesize=40)
     choices = sort(collect(request("Kies uit onderstaande ($choice):", menu)))
     df = filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
+    if nrow(df) == 0 
+        @error "Geen soorten geselecteerd!"
+        return
+    end
     species = unique(df[:,:taxon])
     nspecies = length(species)
     println("-"^width)
