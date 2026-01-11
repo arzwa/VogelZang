@@ -1,9 +1,6 @@
 # TODO: 
 # - Stop playback when answer is given
 # - timeout for replay
-# - when multiple audiofiles for a species, sample with weight given by
-#   duration
-# - after fragment, ask for replay before giving answer
 module VogelZang
 using CSV, DataFrames, StatsBase, REPL
 using REPL.TerminalMenus
