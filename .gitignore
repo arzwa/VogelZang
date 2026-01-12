@@ -1,4 +1,5 @@
 data/audio/
+data/audio.tar.gz
 
 # Created by https://www.toptal.com/developers/gitignore/api/julia,vim,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=julia,vim,linux

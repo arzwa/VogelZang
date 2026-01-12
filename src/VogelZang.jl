@@ -88,9 +88,11 @@ function question(vogel, duration)
             print("(gelijk welke toets om verder te gaan) ")
             antw = strip(readline()) 
             antw != "o" && antw != "a" && antw != "v" && break
-            antw == "o" && playback(fname, start, duration)
-            antw == "a" && playback(randplayback(vogel, duration)[1:3]...)
             antw == "v" && playback(fname)
+            if answer == "a"  # new fragment for same species
+                fname, start, duration, row = randplayback(vogel, duration)
+            end
+            playback(fname, start, duration)
         catch InterruptException
             break
         end
