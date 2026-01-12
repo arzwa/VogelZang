@@ -23,6 +23,11 @@ function update_db!()
     CSV.write(dbfile, db)
 end
 
+function remove_col!(col)
+    _db = db[:,Not(col)]
+    CSV.write(dbfile, _db)
+end
+
 function randplayback(species, duration)
     spdf = filter(x->x.taxon == species, db)
     i = sample(1:nrow(spdf), Weights(spdf.duration))
@@ -31,12 +36,12 @@ function randplayback(species, duration)
     return fname, start, duration, spdf[i,:]
 end
 
-function playback(file, start, duration) 
-    run(`ffplay -ss $start -t $duration -v 0 -autoexit -nodisp $file`)
+function playback(file, start, duration; wait=true) 
+    run(`ffplay -ss $start -t $duration -v 0 -autoexit -nodisp $file`, wait=wait)
 end
 
-function playback(file, start=0) 
-    run(`ffplay -ss $start -v 0 -autoexit -nodisp $file`)
+function playback(file, start=0; wait=true) 
+    run(`ffplay -ss $start -v 0 -autoexit -nodisp $file`, wait=wait)
 end
 
 _lowercase(x) = ismissing(x) ? "" : lowercase(x)
@@ -48,15 +53,17 @@ function iscorrect(row, answer)
 end
 
 function question(vogel, duration)
-    print("Welke vogel horen we? (^C om te antwoorden)")
+    print("Welke vogel horen we?\n")
     fname, start, duration, row = randplayback(vogel, duration)
     answer = "o"
+    process = nothing
     while answer == "o" || answer == "a"
+        !isnothing(process) && kill(process)
         if answer == "a"  # new fragment for same species
             fname, start, duration, row = randplayback(vogel, duration)
         end
         try 
-            playback(fname, start, duration)
+            process = playback(fname, start, duration, wait=false)
             print("Antwoord ([o]pnieuw, [a]nder fragment):\n  ")
             answer = lowercase(readline())
         catch InterruptException
@@ -64,6 +71,7 @@ function question(vogel, duration)
             answer = lowercase(readline())
         end
     end
+    kill(process)
     correct = iscorrect(row, answer)
     if correct
         printstyled("Correct!\n", bold=true, color=:green) 
@@ -75,35 +83,41 @@ function question(vogel, duration)
     print("  |    $(row.taxon)\n")
     print("  |    $(row.family) ($(row.familie))\n")
     while true
-        print("Opnieuw horen [o]? Ander fragment [a]? Volledig fragment [v]?\n")
-        print("(gelijk welke toets om verder te gaan)")
-        antw = strip(readline()) 
-        antw != "o" && antw != "a" && antw != "v" && break
-        antw == "o" && playback(fname, start, duration)
-        antw == "a" && playback(randplayback(vogel, duration)[1:3]...)
-        antw == "v" && playback(fname)
+        try
+            print("Opnieuw horen [o]? Ander fragment [a]? Volledig fragment [v]?\n")
+            print("(gelijk welke toets om verder te gaan) ")
+            antw = strip(readline()) 
+            antw != "o" && antw != "a" && antw != "v" && break
+            antw == "o" && playback(fname, start, duration)
+            antw == "a" && playback(randplayback(vogel, duration)[1:3]...)
+            antw == "v" && playback(fname)
+        catch InterruptException
+            break
+        end
     end
     return correct
 end
 
 function quiz()
-    menu = RadioMenu(names(db)[1:end-1])
-    choice = request("Selecteer op basis van: ", menu)
+    opts = filter(x->x != "duration" && x != "file", names(db))
+    menu = RadioMenu(opts)
+    k = request("Selecteer op basis van: ", menu)
+    choice = opts[k]
     options = map(String, sort(filter(!ismissing, unique(db[:,choice]))))
-    menu = MultiSelectMenu(options, pagesize=40)
-    choices = sort(collect(request("Kies uit onderstaande ($choice):", menu)))
-    df = filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
+    df = if options == ["F", "T"]
+        db[db[:,choice] .== "T",:]
+    else
+        menu = MultiSelectMenu(options, pagesize=40)
+        choices = sort(collect(request("Kies uit onderstaande ($choice):", menu)))
+        filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
+    end
     if nrow(df) == 0 
         @error "Geen soorten geselecteerd!"
         return
     end
     species = unique(df[:,:taxon])
-    nspecies = length(species)
     println("-"^width)
-    print("Hoeveel vragen? ")
-    ns = strip(readline())
-    nq = !isempty(ns) && all(isnumeric, ns) ? parse(Int, ns) : 10
-    print("  OK, $nq vragen.\nDuur audiofragment (s)? ")
+    print("Duur audiofragment (s)? ")
     duration = tryparse(Float64, strip(readline()))
     if isnothing(duration)
         println("  ongeldige duur, dan maar vijf seconden...")
@@ -111,13 +125,15 @@ function quiz()
     else
         println("  $duration seconden.")
     end
-    idx = sample(1:nspecies, nq)
     correct = 0
+    nq = 0
     try
-        for q=1:nq
+        while true
+            nq += 1
+            sp = rand(species)
+            println("\n"*"="^width)
+            println("⋅ Vraag $nq ⋅")
             println("-"^width)
-            println("⋅ Vraag $q ⋅")
-            sp = species[idx[q]]
             correct += question(sp, duration)    
         end
     catch InterruptException
@@ -125,7 +141,29 @@ function quiz()
         println("\nQuiz stopgezet...")
     end
     println("\n"*"-"^width)
-    println("Score: $correct/$nq")
+    println("Score: $correct/$(nq-1)")
+    print("Deze selectie van soorten opslaan? [j/n] ")
+    try
+        answer = strip(readline())
+        answer != "j" && return
+        name = ""
+        while true
+            print("Onder welke naam? ")
+            name = strip(readline())
+            if name ∈ names(db)
+                @warn "`$name` al in database!"
+            elseif name == ""
+                @warn "Ongeldige naam!"
+            else
+                break
+            end
+        end
+        col = map(x->x.taxon ∈ species ? "T" : "F", eachrow(db))
+        db[:,name] = col
+        CSV.write(dbfile, db)
+        return 
+    catch InterruptException
+    end
 end
 
 end # module VogelZang
