@@ -62,14 +62,9 @@ function question(vogel, duration)
         if answer == "a"  # new fragment for same species
             fname, start, duration, row = randplayback(vogel, duration)
         end
-        try 
-            process = playback(fname, start, duration, wait=false)
-            print("Antwoord ([o]pnieuw, [a]nder fragment):\n  ")
-            answer = lowercase(readline())
-        catch InterruptException
-            print("\nAntwoord ([o]pnieuw, [a]nder fragment):\n  ")
-            answer = lowercase(readline())
-        end
+        process = playback(fname, start, duration, wait=false)
+        print("Antwoord ([o]pnieuw, [a]nder fragment):\n  ")
+        answer = lowercase(readline())
     end
     kill(process)
     correct = iscorrect(row, answer)
@@ -83,19 +78,15 @@ function question(vogel, duration)
     print("  |    $(row.taxon)\n")
     print("  |    $(row.family) ($(row.familie))\n")
     while true
-        try
-            print("Opnieuw horen [o]? Ander fragment [a]? Volledig fragment [v]?\n")
-            print("(gelijk welke toets om verder te gaan) ")
-            antw = strip(readline()) 
-            antw != "o" && antw != "a" && antw != "v" && break
-            antw == "v" && playback(fname)
-            if answer == "a"  # new fragment for same species
-                fname, start, duration, row = randplayback(vogel, duration)
-            end
-            playback(fname, start, duration)
-        catch InterruptException
-            break
+        print("Opnieuw horen [o]? Ander fragment [a]? Volledig fragment [v]?\n")
+        print("(gelijk welke toets om verder te gaan) ")
+        antw = strip(readline()) 
+        antw != "o" && antw != "a" && antw != "v" && break
+        antw == "v" && playback(fname)
+        if answer == "a"  # new fragment for same species
+            fname, start, duration, row = randplayback(vogel, duration)
         end
+        playback(fname, start, duration)
     end
     return correct
 end
@@ -105,10 +96,11 @@ function quiz()
     menu = RadioMenu(opts)
     k = request("Selecteer op basis van: ", menu)
     choice = opts[k]
-    options = map(String, sort(filter(!ismissing, unique(db[:,choice]))))
-    df = if options == ["F", "T"]
-        db[db[:,choice] .== "T",:]
+    options = sort(filter(!ismissing, unique(db[:,choice])))
+    df = if options == [false,true]
+        db[db[:,choice],:]
     else
+        options = map(String, options)
         menu = MultiSelectMenu(options, pagesize=40)
         choices = sort(collect(request("Kies uit onderstaande ($choice):", menu)))
         filter(x->!ismissing(x[choice]) && x[choice] ∈ options[choices], db)
@@ -129,18 +121,19 @@ function quiz()
     end
     correct = 0
     nq = 0
-    try
-        while true
+    while true
+        try
             nq += 1
             sp = rand(species)
             println("\n"*"="^width)
             println("⋅ Vraag $nq ⋅")
             println("-"^width)
             correct += question(sp, duration)    
+        catch InterruptException
+            println("\n"*"-"^width)
+            println("\nQuiz stopgezet...")
+            break
         end
-    catch InterruptException
-        println("\n"*"-"^width)
-        println("\nQuiz stopgezet...")
     end
     println("\n"*"-"^width)
     println("Score: $correct/$(nq-1)")
