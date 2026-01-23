@@ -98,6 +98,7 @@ function question(vogel, duration)
 end
 
 function quiz()
+    reload_db!()
     opts = filter(x->x != "duration" && x != "file", names(db))
     menu = RadioMenu(opts)
     k = request("Selecteer op basis van: ", menu)
@@ -159,7 +160,7 @@ function quiz()
                 break
             end
         end
-        col = map(x->x.taxon ∈ species ? "T" : "F", eachrow(db))
+        col = map(x->x.taxon ∈ species ? true : false, eachrow(db))
         db[:,name] = col
         CSV.write(dbfile, db)
         return 
