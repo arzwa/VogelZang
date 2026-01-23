@@ -26,6 +26,12 @@ end
 function remove_col!(col)
     _db = db[:,Not(col)]
     CSV.write(dbfile, _db)
+    reload_db!()
+end
+
+function reload_db!()
+    #@info "Loading data from $(abspath(dbfile))"
+    global db = CSV.read(dbfile, DataFrame)
 end
 
 function randplayback(species, duration)
